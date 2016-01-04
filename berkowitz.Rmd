@@ -55,7 +55,9 @@ In what follows, I "kick the tires" on the dataset provided by Berkowitz et al.,
 
 This document is a joint exploration and reanalysis. My intention was to apply a "naive" analytic strategy, that is, to analyze the data as though I were coming at them without having read the paper. In doing that, I hoped to ascertain whether some of the results in the paper were obtained only via particular analytic strategies (e.g., a specific way of discretizing a continuous variable) or whether they were robust to the details of these decisions.
 
-To summarize the results of the reanalysis: In my view, the Berkowitz et al. study does not show that the intervention as a whole was successful, because there was no main effect of the intervention on performance. Instead, it shows that -- in some analyses -- more use of the math app was related to greater growth in math performance, a dose-response relationship that is subject to some [endogeneity issues](http://home.uchicago.edu/ludwigj/papers/Duncan_EndogeneityProblem.pdf) (because parents who use math apps more are potentially different from those who don't). In addition, there is very limited evidence for a relationship of this growth to math anxiety. In sum, this is a well-designed study that nevertheless shows only tentative support for an app-based intervention.
+To summarize the results of the reanalysis: In my view, the Berkowitz et al. study does not show that the intervention as a whole was successful, because there was no main effect of the intervention on performance. Instead, it shows that -- in some analyses -- more use of the math app was related to greater growth in math performance, a dose-response relationship that is subject to significant [endogeneity issues](http://home.uchicago.edu/ludwigj/papers/Duncan_EndogeneityProblem.pdf) (because parents who use math apps more are potentially different from those who don't). In addition, there is very limited evidence for a relationship of this growth to math anxiety. In sum, this is a well-designed study that nevertheless shows only tentative support for an app-based intervention.
+
+NOTE: Some aspects of this reanalysis will be published as a Technical Comment on Berkowitz et al. To facilitate discussion I am adding a section to the end of my report that reproduces the analyses in that published version, in order. This will lead to some duplication but hopefully also make it easier to understand the details of the comment and how they relate to this report. 
 
 # Exploration
 
@@ -372,22 +374,40 @@ diffs.excl.ge <- dt.excl.ge %>%
 
 ms.diffs.excl.ge <- diffs.excl.ge %>%
   group_by(condition, measure) %>%
-  multi_boot_standard(column = "score", na.rm=TRUE)
+  multi_boot_standard(column = "score", na.rm=TRUE) %>%
+  ungroup %>%
+  mutate(measure = factor(measure, 
+                            levels = c("math_gain","reading_gain"), 
+                            labels = c("WJ Applied Problems\n(Math)", 
+                                       "WJ Letter-Word\n(Reading)")), 
+         Condition = condition)
 
+# quartz()
 ggplot(ms.diffs.excl.ge, aes(x = measure, y = mean, 
                ymin = ci_lower, ymax = ci_upper, 
-               fill = condition)) +
+               fill = Condition)) +
   geom_bar(stat="identity", position = "dodge") +
   geom_linerange(position = position_dodge(width = .9)) + 
-  scale_fill_solarized()
+  scale_fill_solarized() + 
+  ylab("Improvement (Grade Equivalents)") + 
+  xlab("Measure") + ylim(c(0,1)) 
 ```
 
 This crossover goes away, though the math effect actually looks a little bit bigger. Let's try a simple post-hoc t-test -- we can see if it holds up in the longitudinal analysis later. 
 
 ```{r}
 kable(tidy(with(diffs.excl.ge, 
-                t.test(score[condition == "Math App" & measure == "math_gain"],
-                       score[condition == "Reading App" & measure == "math_gain"]))))
+                t.test(score[condition == "Math App" & 
+                               measure == "math_gain"],
+                       score[condition == "Reading App" & 
+                               measure == "math_gain"], var.equal = TRUE))))
+
+kable(tidy(with(diffs.excl.ge, 
+                t.test(score[condition == "Math App" & 
+                               measure == "reading_gain"],
+                       score[condition == "Reading App" & 
+                               measure == "reading_gain"], var.equal = TRUE))))
+
 ```
 
 So no, this difference is not significant, unfortunately, even uncorrected for multiple comparisons.
@@ -475,14 +495,29 @@ Next with GE scores.
 ```{r}
 ggplot(diffs.full, aes(x = ParentMAaverage.Fa13, y = score.ge, col = measure)) + 
   facet_grid(.~condition) +
-  geom_point() + 
+  geom_jitter() + 
   geom_smooth(method = "lm") + 
   scale_colour_solarized() + 
-  xlab("Parent math anxiety") + 
-  ylab("Change in GE score")
+  xlab("Parent Math Anxiety") + 
+  ylab("Improvement (Grade Equivalents)")
 ```
 
 Overall, I don't see much going on here. In both cases the trend is towards less gain with more math anxiety, though, and again this is slightly clearer with GEs than with W scores.
+
+One more plot, this time eliminating reading.
+
+```{r}
+diffs.full$Condition <- diffs.full$condition
+
+ggplot(filter(diffs.full, measure == "math_gain"), 
+       aes(x = ParentMAaverage.Fa13, y = score.ge, col = Condition)) + 
+  geom_jitter(width = .01, height = .01) + 
+  geom_smooth(method = "lm") + 
+  scale_colour_solarized() + 
+  xlab("Parent Math Anxiety") + 
+  ylab("Improvement (Grade Equivalents)")
+```
+
 
 ## Math anxiety and app usage together
 
@@ -585,32 +620,70 @@ This plot definitely reproduces the qualitative trends of Figure 2, though note 
 But I am not convinced the trends here are not a binning artifact. Let's go back to the raw data and make this same plot. 
 
 ```{r}
+# diffs.full$Anxiety <- factor(diffs.full$parentMA_mediansplit, 
+#                              levels = c(1,2), 
+#                              labels = c("Low Anxiety",
+#                                         "High Anxiety"))
 ggplot(filter(diffs.full, 
               !is.na(parentMA_mediansplit), 
               condition == "Math App"), 
-              aes(x = avg.use, y = score.ge, col = parentMA_mediansplit)) + 
+              aes(x = avg.use, y = score.ge, 
+                  col = parentMA_mediansplit)) + 
   geom_point() + 
-  geom_smooth(se=FALSE, size = 2, lty = 2) + 
-  geom_smooth(se=FALSE, method = "lm", size = 2) + 
+  # geom_smooth(se=FALSE, size = 2, lty = 2) + 
+  geom_smooth(se=TRUE, method = "lm") + 
   scale_colour_solarized() + 
-  xlab("Average app usage") + 
-  ylab("Change in GE score")
+  xlab("Average Weekly App Usage") + 
+  ylab("Improvement (Grade Equivalents)")
 ```
 
-It looks much less clearly like there are any justifiable non-linearities in the low anxiety group. Instead, the U-shaped trend appears to be a binning artifact. To illustrate this point, I included a linear smoother (solid) and a loess smoother (dashed). You can see that there is a bit of curvature in the low anxiety, but overall, the trend appears to be that the high anxiety parents are getting less of a dose response, as you'd expect. In sum, I see no evidence here in the continuous data for the claim (_Children of high-math-anxious parents who used the math app about once a week (Bin 1) grew significantly more in math achievement than children of high-math-anxious parents who used the app the least._). Looking at the loess smoothers makes it seem like this difference is just a bit of an odd blip in the otherwise pretty continuous pattern of data.
+It looks much less clearly like there are any justifiable non-linearities in the low anxiety group. Instead, the U-shaped trend appears to be a binning artifact. To illustrate this point, I included a linear smoother (solid) and a loess smoother (dashed) below.
+
+```{r}
+ggplot(filter(diffs.full, 
+              !is.na(parentMA_mediansplit), 
+              condition == "Math App"), 
+              aes(x = avg.use, y = score.ge, 
+                  col = parentMA_mediansplit)) + 
+  geom_point() + 
+  geom_smooth(se=TRUE, size = 2, lty = 2) + 
+  # geom_smooth(se=TRUE, method = "lm") + 
+  scale_colour_solarized() + 
+  xlab("Average Weekly App Usage") + 
+  ylab("Improvement (Grade Equivalents)")
+```
+
+You can see that there is a bit of curvature in the low anxiety, but overall, the trend appears to be that the high anxiety parents are getting less of a dose response, as you'd expect. In sum, I see little evidence here in the continuous data for the claim (_Children of high-math-anxious parents who used the math app about once a week (Bin 1) grew significantly more in math achievement than children of high-math-anxious parents who used the app the least._). Looking at the loess smoothers makes it seem like this difference is just a bit of an odd blip in the otherwise pretty continuous pattern of data.
 
 # Statistical models
 
 Although I think the visual analysis above tells most of the story, I'll give some linear mixed effect models to test the reliability of these patterns. First let's do a basic intention-to-treat longitudinal analysis. 
 
-For simplicity and to avoid overparameterizing the analysis, I'll do these using only the math measure. That's still a decision that needs to be made for a study like this, but I think it's relatively justifiable because of the planned focus on math.
+There are several ways to do these analyses. First, we could just test directly for differences. Or we could do a longitudinal analysis where we look at change over time. I'm selecting this second here, for two reasons. First, as shown above these outcome measures are highly reliable, so baseline subtraction is useful for removing between-subjects variability and getting the best estimate of effects. Second, in the graphical approach above it seemed clear that nothing was doing when we looked at the raw scores at the end of the study.
+
+For simplicity and to avoid overparameterizing the analysis, I'll do these analyses using only the math measure. That's still a decision that needs to be made for a study like this, but I think it's relatively justifiable because of the planned focus on math.
 
 In all of these models I will be looking for interactions, rather than subsetting the data to look for main effects in a subgroup. In Section 4 above I noted that there was an issue in the original paper with informal comparisons between models that had coefficients that either were or were not significant; this is an instance of the "difference between significant and not significant is not itself significant" fallacy. The interaction tests that are the key coefficient in the models below are what I believe to be the correct way to analyze these claims.
 
-One final note: There are only two observations per child for any measure, so the maximal random effects structure that we can have is a single intercept for each child. 
+The $p$-values I report will mostly be using the $t=z$ approximation, which is justified with so many observations, but I'll also give the occasional likelihood ratio test for nested model comparison using ANOVA.
+
+One final note: There are only two observations per child for any measure, so the maximal random effects structure that we can have is a single intercept for each child. Thanks to correspondence with Berkowitz et al. we now include random slope and intercept for classroom (these do not modify interpretation particularly).
+
+Reparameterize condition to make the coeffients interpretable. 
+```{r}
+dt.excl$condition <- factor(dt.excl$condition, 
+                            levels = c("Reading App","Math App"))
+dt.excl.ge$condition <- factor(dt.excl.ge$condition, 
+                            levels = c("Reading App","Math App"))
+
+```
+
+And a basic model. 
 
 ```{r}
-kable(summary(lmer(score ~ condition * time + (1 | ChildID), 
+kable(summary(lmer(score ~ condition * time 
+                   + (1 | ChildID)
+                   + (time | TeachID.Year1), 
      data = filter(dt.excl, 
                    measure == "Math")))$coefficients, digits = 3)
 ```
@@ -618,7 +691,9 @@ kable(summary(lmer(score ~ condition * time + (1 | ChildID),
 In this model, we see no interaction of condition x time on math scores, confirming the claim above that there is no main effect. Let's try GE instead of W.
 
 ```{r}
-kable(summary(lmer(score ~ condition * time + (1 | ChildID), 
+kable(summary(lmer(score ~ condition * time 
+                   + (1 | ChildID)
+                   + (time | TeachID.Year1),
      data = filter(dt.excl.ge, 
                    measure == "Math")))$coefficients, digits = 3)
 ```
@@ -630,7 +705,9 @@ Again no interaction. These analyses together strongly support the idea that the
 If we have a specific dose-response relationship between math app usage and math scores, we should see a three-way interaction between condition (math app), usage time, and time in the study, reflecting differential growth in math scores per unit usage. Let's try this with W scores first. 
 
 ```{r}
-kable(summary(lmer(score ~ condition * time * avg.use + (1 | ChildID), 
+kable(summary(lmer(score ~ condition * time * avg.use 
+                   + (1 | ChildID)
+                   + (time | TeachID.Year1), 
      data = filter(dt.excl, 
                    measure == "Math")))$coefficients, digits = 3)
 ```
@@ -638,7 +715,9 @@ kable(summary(lmer(score ~ condition * time * avg.use + (1 | ChildID),
 This model contains some evidence that usage is making a difference (the two-way interaction of time and use), but because the interaction isn't quite significant, this isn't the strongest model result you might want. Let's try GE scores. 
 
 ```{r}
-kable(summary(lmer(score ~ condition * time * avg.use + (1 | ChildID), 
+kable(summary(lmer(score ~ condition * time * avg.use 
+                   + (1 | ChildID)
+                   + (time | TeachID.Year1), 
      data = filter(dt.excl.ge, 
                    measure == "Math")))$coefficients, digits = 3)
 ```
@@ -650,10 +729,14 @@ In this model the key three-way interaction is significant. So the dose-response
 It's less clear to me what the prediction should be in terms of math anxiety. Let's ask whether it interacts with growth in math performance to start with. 
 
 ```{r}
-kable(summary(lmer(score ~ time * ParentMAaverage.Fa13 + (1 | ChildID), 
+kable(summary(lmer(score ~ time * ParentMAaverage.Fa13 
+                   + (1 | ChildID)
+                   + (time | TeachID.Year1),
      data = filter(dt.excl, 
                    measure == "Math")))$coefficients, digits = 3)
-kable(summary(lmer(score ~ time * ParentMAaverage.Fa13 + (1 | ChildID), 
+kable(summary(lmer(score ~ time * ParentMAaverage.Fa13 
+                   + (1 | ChildID)
+                   + (time | TeachID.Year1),
      data = filter(dt.excl.ge, 
                    measure == "Math")))$coefficients, digits = 3)
 ```
@@ -662,93 +745,61 @@ So across groups, there is less growth in math performance for kids of more anxi
 
 
 ```{r}
-kable(summary(lmer(score ~ time * condition * ParentMAaverage.Fa13 + (1 | ChildID), 
+kable(summary(lmer(score ~ time * condition * ParentMAaverage.Fa13 
+                   + (1 | ChildID)
+                   + (time | TeachID.Year1),
      data = filter(dt.excl, 
                    measure == "Math")))$coefficients, digits = 3)
-kable(summary(lmer(score ~ time * condition * ParentMAaverage.Fa13 + (1 | ChildID), 
+kable(summary(lmer(score ~ time * condition * ParentMAaverage.Fa13 
+                   + (1 | ChildID)
+                   + (time | TeachID.Year1),
      data = filter(dt.excl.ge, 
                    measure == "Math")))$coefficients, digits = 3)
 ```
 
 The answer here is no. We don't see any three-way interaction, which -- if we had seen it -- would have supported the claim that math performance is less (or more) affected by being assigned to the math app if parents had high math anxiety. 
 
-Given that result, I am not sure if it's worth looking for a four-way interaction with the (already somewhat weak) dose response, but here goes - only in GE scores for now.  
+Given that result, I am not sure if it's worth looking for a four-way interaction with the (already somewhat weak) dose response, but here goes.
+
 ```{r}
 kable(summary(lmer(score ~ time * condition * ParentMAaverage.Fa13 * avg.use + 
-               (1 | ChildID), 
+               + (1 | ChildID)
+               + (time | TeachID.Year1),
+     data = filter(dt.excl, 
+                   measure == "Math")))$coefficients, digits = 3)
+
+kable(summary(lmer(score ~ time * condition * ParentMAaverage.Fa13 * avg.use + 
+               + (1 | ChildID)
+               + (time | TeachID.Year1),
      data = filter(dt.excl.ge, 
                    measure == "Math")))$coefficients, digits = 3)
 ```
 
-Nothing here at all, except a time by use interaction that suggests that app usage overall may signal parents who are more involved in children's learning. 
-
-One last try, preventing over-parameterization by cutting down to only the math app students. 
+No four-way interaction at all. One last try, preventing over-parameterization by cutting down to only the math app students. 
 
 ```{r}
-kable(summary(lmer(score ~ time * ParentMAaverage.Fa13 * avg.use + 
-               (1 | ChildID), 
+kable(summary(lmer(score ~ time * ParentMAaverage.Fa13 * avg.use 
+                   + (1 | ChildID)
+                   + (time | TeachID.Year1),
      data = filter(dt.excl.ge, 
                    measure == "Math" & condition == "Math App")))$coefficients, digits = 3)
 ```
 
-Same result. So this model essentially confirms our failure to see a reliable effect of math anxiety (e.g., the claim implied by Figure 2 and the corresponding models in the paper is not supported in this reanalysis). 
-
-## Instrumental variable regression 
-
-Thanks to Johannes Haushofer for this suggestion. 
+And removing the usage.
 
 ```{r}
-library(AER)
-summary(ivreg(WJ.Applied.Problems_W.Score_Sp14 ~ avg.use | condition, 
-      data=d))
-```
-
-## Redo of analyses with classroom effects taken into account
-
-In correspondence with Berkowitz et al. they noted that my analyses failed to take into account that randomization happened across classrooms. To add classroom effects into these models, I add random intercepts for each class, and random slopes for time by class (differential growth per class). 
-
-The first set of these analyses examines overall success of the intervention, as shown by a condition x time interaction. 
-
-```{r}
-itt.mod <- lmer(score ~ condition * time + 
-                  (1 | ChildID) + 
-                  (time | TeachID.Year1), 
-                data = filter(dt.excl, 
-                              measure == "Math"))
-kable(summary(itt.mod)$coefficients, digits = 3)
-```
-
-We don't see any major differences here. Let's see what the random effects of classroom look like.
-
-```{r}
-qplot(ranef(itt.mod)$TeachID.Year1[,1]) + xlab("Classroom Intercept")
-qplot(ranef(itt.mod)$TeachID.Year1[,2]) + xlab("Classroom Slope")
-```
-
-There is a real distribution here, suggesting that we're capturing some variability. Next let's look at the endogenous analysis: condition x time x usage. 
-
-```{r}
-kable(summary(lmer(score ~ condition * time * avg.use + 
-                     (1 | ChildID) +
-                     (time | TeachID.Year1), 
-     data = filter(dt.excl, 
-                   measure == "Math")))$coefficients, digits = 3)
-
-```
-
-We don't see big changes here. There is an average app use effect that's even slightly stronger, and there is also a strong time x average use interaction, signaling greater app usage leading to  But we still fail to see the critical three-way interation (on the W scores). Let's look at GEs again, now controlling for classroom.
-
-```{r}
-kable(summary(lmer(score ~ condition * time * avg.use + 
-                     (1 | ChildID) +
-                     (time | TeachID.Year1), 
+kable(summary(lmer(score ~ time * ParentMAaverage.Fa13
+                   + (1 | ChildID)
+                   + (time | TeachID.Year1),
      data = filter(dt.excl.ge, 
-                   measure == "Math")))$coefficients, digits = 3)
+                   measure == "Math" & condition == "Math App")))$coefficients, digits = 3)
 ```
 
-Again we see the GE analysis showing the three-way interaction. 
+Same results, though in the last subgroup analysis there is starting to be a negative interaction such that parents who are more anxious see less growth. So this model essentially confirms our failure to see a reliable effect of math anxiety (e.g., the claim implied by Figure 2 and the corresponding models in the paper is not supported in this reanalysis). 
 
-Now let's move on to the math anxiety analyses. Let's look for the three-way interaction of time x condition x anxiety, e.g. testing for more growth for kids of highly anxious parents using the math app. 
+## Followup on math anxiety
+
+Going back to the three-way interaction model above, let's investigate further. First, the model again:
 
 ```{r}
 kable(summary(lmer(score ~ time * condition * ParentMAaverage.Fa13 + 
@@ -758,7 +809,7 @@ kable(summary(lmer(score ~ time * condition * ParentMAaverage.Fa13 +
                    measure == "Math")))$coefficients, digits = 3)
 ```
 
-In this model we're not seeing much of anything, actually. So let's try to replicate the split analysis from the paper, where we look at growth separately for the two anxiety groups. First low anxiety:
+In this model we're not seeing much of anything. So let's try to replicate the split analysis from the paper, where we look at growth separately for the two anxiety groups. First low anxiety:
 
 ```{r}
 kable(summary(lmer(score ~ time * condition + 
@@ -769,18 +820,191 @@ kable(summary(lmer(score ~ time * condition +
                    parentMA_mediansplit == 1)))$coefficients, digits = 3)
 ```
 
-Now high anxiety:
+As in the original paper, we don't find an effect here. Now high anxiety:
 
 ```{r}
-kable(summary(lmer(score ~ time * condition + 
+itt.hianx <- lmer(score ~ time * condition + 
                      (1 | ChildID) +
                      (time | TeachID.Year1), 
      data = filter(dt.excl, 
                    measure == "Math",
-                   parentMA_mediansplit == 2)))$coefficients, digits = 3)
+                   parentMA_mediansplit == 2))
+
+kable(summary(itt.hianx)$coefficients, digits = 3)
 ```
 
+Unlike the original paper, we don't find a significant effect in this condition either. To follow up, we can use ANOVA to get a fairly reliable $p$-value on this test:
 
+```{r}
+itt.hianx.noint <- lmer(score ~ time + condition + 
+                     (1 | ChildID) +
+                     (time | TeachID.Year1), 
+     data = filter(dt.excl, 
+                   measure == "Math",
+                   parentMA_mediansplit == 2))
+kable(anova(itt.hianx,itt.hianx.noint))
+```
+
+So by a likelihood-ratio test, we do find something that looks like it has the same sign and is $p = .11$). Close, but not the same result. In response to an earlier version of this report where I pointed out that the coefficients on these models were not compared directly, Berkowitz et al. wrote that:
+
+> While comparing the coefficients of ITT effects for high- and low-math anxious parents (i.e., the interaction between parent math anxiety and app condition) is a low-powered test, we see a significant difference between the high- and low-math anxious parents at p=0.033, one-tailed given our a priori hypothesis (marginal using a two-tailed test p=0.066).
+
+They also specified that the specific test here was a Wald test for the difference between two fixed effects (performed in HLM).
+
+Interestingly, examining these models you can see why the coefficients might  test out to be different from one another. The condition effect is somewhat different across the two individual models. Let's do the whole analysis using likelihood-ratio test to see if the interaction is significant with the median split on anxiety:
+
+```{r}
+itt.median.interaction <- lmer(score ~ time * condition * parentMA_mediansplit + 
+                                 (1 | ChildID) +
+                                 (time | TeachID.Year1), 
+                               data = filter(dt.excl, 
+                                             measure == "Math"))
+itt.median.nointeraction <- lmer(score ~ time * condition + 
+                                   time * parentMA_mediansplit + 
+                                   condition * parentMA_mediansplit +
+                                   (1 | ChildID) +
+                                   (time | TeachID.Year1), 
+                                 data = filter(dt.excl, 
+                                               measure == "Math"))
+
+kable(summary(itt.median.interaction)$coefficients, digits = 3)
+kable(anova(itt.median.interaction, itt.median.nointeraction))
+```
+
+This analysis is actually getting closer ($p = .13$). Let's also try it with GEs.
+
+```{r}
+itt.median.interaction <- lmer(score ~ time * condition * parentMA_mediansplit + 
+                                 (1 | ChildID) +
+                                 (time | TeachID.Year1), 
+                               data = filter(dt.excl.ge, 
+                                             measure == "Math"))
+itt.median.nointeraction <- lmer(score ~ time * condition + 
+                                   time * parentMA_mediansplit + 
+                                   condition * parentMA_mediansplit +
+                                   (1 | ChildID) +
+                                   (time | TeachID.Year1), 
+                                 data = filter(dt.excl.ge, 
+                                               measure == "Math"))
+
+kable(anova(itt.median.interaction, itt.median.nointeraction))
+```
+
+Here the GEs make things worse. 
+
+Summary from this set of reanalyses that try to redo analyses closer to those reported by Berkowitz et al.:
+
+* Controlling for classroom effects doesn't seem to make much of a difference overall.
+* I can see hints of a predicted interaction between growth, condition, and anxiety, but only using a post-hoc median split on math anxiety. These hints are not present for the continuous measure, however.
+
+# Technical Comment Analyses
+
+As discussed above, this section will reproduce the analyses from above that ended up in my Technical Comment. 
+
+Figure 1.
+
+```{r}
+ggplot(ms.diffs.excl.ge, aes(x = measure, y = mean, 
+               ymin = ci_lower, ymax = ci_upper, 
+               fill = Condition)) +
+  geom_bar(stat="identity", position = "dodge") +
+  geom_linerange(position = position_dodge(width = .9)) + 
+  scale_fill_solarized() + 
+  ylab("Improvement (Grade Equivalents)") + 
+  xlab("Measure") + ylim(c(0,1)) 
+```
+
+$t$-tests for Figure 1.
+
+```{r}
+kable(tidy(with(diffs.excl.ge, 
+                t.test(score[condition == "Math App" & 
+                               measure == "math_gain"],
+                       score[condition == "Reading App" & 
+                               measure == "math_gain"], var.equal = TRUE))))
+
+kable(tidy(with(diffs.excl.ge, 
+                t.test(score[condition == "Math App" & 
+                               measure == "reading_gain"],
+                       score[condition == "Reading App" & 
+                               measure == "reading_gain"], var.equal = TRUE))))
+
+```
+
+Main longitudinal models (for paragraph beginning "first"). GE scores and then W scores.
+
+```{r}
+kable(summary(lmer(score ~ condition * time 
+                   + (1 | ChildID)
+                   + (time | TeachID.Year1),
+     data = filter(dt.excl.ge, 
+                   measure == "Math")))$coefficients, digits = 3)
+
+kable(summary(lmer(score ~ condition * time 
+                   + (1 | ChildID)
+                   + (time | TeachID.Year1), 
+     data = filter(dt.excl, 
+                   measure == "Math")))$coefficients, digits = 3)
+```
+
+Three-way interaction models (for paragraph beginning "second"). GE and then W scores, as above. 
+
+```{r}
+kable(summary(lmer(score ~ condition * time * avg.use 
+                   + (1 | ChildID)
+                   + (time | TeachID.Year1), 
+     data = filter(dt.excl.ge, 
+                   measure == "Math")))$coefficients, digits = 3)
+
+kable(summary(lmer(score ~ condition * time * avg.use 
+                   + (1 | ChildID)
+                   + (time | TeachID.Year1), 
+     data = filter(dt.excl, 
+                   measure == "Math")))$coefficients, digits = 3)
+```
+
+Figure 2. 
+
+```{r}
+ggplot(filter(diffs.full, 
+              !is.na(parentMA_mediansplit), 
+              condition == "Math App"), 
+              aes(x = avg.use, y = score.ge, 
+                  col = parentMA_mediansplit)) + 
+  geom_point() + 
+  geom_smooth(se=TRUE, method = "lm") + 
+  scale_colour_solarized() + 
+  xlab("Average Weekly App Usage") + 
+  ylab("Improvement (Grade Equivalents)")
+```
+
+Math anxiety three- and four-way interactions (for paragraph beginning "third").
+
+```{r}
+kable(summary(lmer(score ~ time * condition * ParentMAaverage.Fa13 
+                   + (1 | ChildID)
+                   + (time | TeachID.Year1),
+     data = filter(dt.excl.ge, 
+                   measure == "Math")))$coefficients, digits = 3)
+
+kable(summary(lmer(score ~ time * condition * ParentMAaverage.Fa13 
+                   + (1 | ChildID)
+                   + (time | TeachID.Year1),
+     data = filter(dt.excl, 
+                   measure == "Math")))$coefficients, digits = 3)
+
+kable(summary(lmer(score ~ time * condition * ParentMAaverage.Fa13 * avg.use + 
+               + (1 | ChildID)
+               + (time | TeachID.Year1),
+     data = filter(dt.excl, 
+                   measure == "Math")))$coefficients, digits = 3)
+
+kable(summary(lmer(score ~ time * condition * ParentMAaverage.Fa13 * avg.use + 
+               + (1 | ChildID)
+               + (time | TeachID.Year1),
+     data = filter(dt.excl.ge, 
+                   measure == "Math")))$coefficients, digits = 3)
+```
 
 # Conclusions
 
