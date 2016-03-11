@@ -1,11 +1,13 @@
 ---
 title: "Berkowitz et al. (2015) reanalysis"
 author: "Michael C. Frank"
-date: "`r Sys.Date()`"
-output: 
+date: '`r Sys.Date()`'
+output:
+  pdf_document:
+    toc: yes
   html_document:
-    toc: true
-    number_sections: true
+    number_sections: yes
+    toc: yes
 ---
 
 <style type="text/css">
@@ -40,7 +42,7 @@ theme_set(theme_bw())
 
 This document reports a reanalysis of [Berkowitz et al. (2015), _Science_](http://www.sciencemag.org/content/350/6257/196.full). The original paper describes a randomized controlled trial of a learning app. Children were randomly assigned to math and reading app groups; their learning outcomes on standardized math and reading tests were assessed after a period of app usage. A math anxiety measure was also collected for children's parents. The authors write that:
 
-_The intervention, short numerical story problems delivered through an iPad app, significantly increased children’s math achievement across the school year compared to a reading (control) group, especially for children whose parents are habitually anxious about math._
+_The intervention, short numerical story problems delivered through an iPad app, significantly increased children's math achievement across the school year compared to a reading (control) group, especially for children whose parents are habitually anxious about math._
 
 To state up front, I think this paper has a number of important strengths, including:
 
@@ -179,7 +181,7 @@ OK, so the grade level equivalence transform squishes the lower scores and expan
 
 One of the tricky things in this dataset is figuring out how to make the exclusions line up with the paper. The SI of the paper notes that:
 
-_In addition to the children excluded from the relevant math or reading analyses because they failed to hit basal or ceiling on the measures as detailed above, 32 twins were excluded since they were often split between different classrooms, and therefore would likely have been assigned to different groups and thus would have had access to both apps. An additional 21 families dropped out by calling to tell us that they were moving to another district, or that they no longer wished to be in the study: 16 in the math group (3.8%); 5 in the reading group (3.0%). Moreover, for an additional 31 children, app data suggested they never opened the app. We left these children in as 0 users. However, excluding them from the analyses does not change the significance level of any of the reported outcomes. Finally, it is important to note that 26 families consented to be in the study, but failed to pick up an iPad Mini following fall testing. Given that these families did not start the study, we did not include them in our original 587 children number. All other children were included in the original 587 tally._
+_In addition to the children excluded from the relevant math or reading analyses because they failed to hit basal or ceiling on the measures as detailed above, 32 twins were excluded since they were often split between different classrooms, and therefore would likely have been assigned to different groups and thus would have had access to both apps. An additional 21 families dropped out by calling to tell us that they were moving to another district, or that they no longer wished to be in the study: 16 in the math group (3.8 percent); 5 in the reading group (3.0 percent). Moreover, for an additional 31 children, app data suggested they never opened the app. We left these children in as 0 users. However, excluding them from the analyses does not change the significance level of any of the reported outcomes. Finally, it is important to note that 26 families consented to be in the study, but failed to pick up an iPad Mini following fall testing. Given that these families did not start the study, we did not include them in our original 587 children number. All other children were included in the original 587 tally._
 
 So we need to exclude:
 
